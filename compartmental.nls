@@ -1,0 +1,120 @@
+Globals [
+  numJuris
+  delta_t
+  case_fatality_rate
+  ;Compartments
+  Total_Population
+  Susceptible
+  Latent
+  Infectious
+  Symptomatic
+  Recovered&Immune
+  Deaths
+  
+   ;Derivative
+  Derivative_Susceptible
+  Derivative_Latent
+  Derivative_Infectious
+  Derivative_Symptomatic
+  Derivative_Recovered&Immune
+  Derivative_Deaths
+
+  ;Rates
+  Transmission_Rate
+  Gamma1
+  Gamma2
+  Gamma3
+]
+
+to setup-compartmental
+  ;;set values of the global variables as equal to empty lists
+  ;set surveillanceJuri n-values numJuris [0]
+  ;if intervene? [intervene]
+
+  set Total_Population []
+  set Susceptible []
+  set Latent[]
+  set Infectious[]
+  set Symptomatic[]
+  set Recovered&Immune []
+  set Deaths[]
+  set numJuris 1
+  
+  let i 0 ; 'set' is used for setting value of global variabes; 'let' is used when you want to use a local variable
+  while [i < numJuris] [
+    set Total_Population lput (Population.size) Total_Population; reads data from inbuilt function
+    set Infectious lput (initial.infections) Infectious
+    set Latent lput (0 )  Latent
+    set Symptomatic lput (0 )  Symptomatic
+    set Deaths lput 0 Deaths
+    set Recovered&Immune lput 0 Recovered&Immune
+    set Susceptible lput  (item i Total_Population - item i Latent - item i Infectious - item i Symptomatic - item i Recovered&Immune - item i Deaths) Susceptible
+    set i i + 1
+  ]
+  
+  set delta_t 1
+  set case_fatality_rate 0
+  reset-ticks
+end
+
+to Simulate-compartmental
+  ;if (sum(Infectious))  > 20000 [stop]; stopping condition
+
+  ;if ticks > stop_days / delta_t [stop]
+  ;ifelse ticks > startContactReduction / delta_t and ticks < stopContactReduction / delta_t
+  ;[set pc reducedPC]
+  ;[set pc actualPC ]
+
+  ;if sum(Infectious) + sum(Latent) < 1 [stop]
+  let i 0
+  while [i < numJuris] [
+   ; if item i surveillanceJuri = 1 and item i Infectious > 100 [stop]
+    ;let Name (item (i) juriNames) ; reads name of country from 'cases'
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    repeat (1 / delta_t) [Calculate_Rates i
+    Calculate_Derivatives i
+    Calculate_Differential_Equations i
+    ]
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    ;updateEpi Name (item i Infectious) (item i Infectious) / (item i Total_Population); calls procedure in gisFeatures.nls for purposes of animation
+    set i i + 1
+  ]
+  ;setReported
+  ;tick
+end
+
+to Calculate_Rates [i]
+  ; probality mixing within country * propotion of people infected in country + probality mixing within country of epidemic origin * propotion of people infected in epidemic origin country
+  let proportionInfected 0
+  set proportionInfected item i Infectious / population.size
+  
+  ;print precision (proportionInfected) 2
+  set Transmission_rate  transmission.risk * contacts_per_day * proportionInfected; Transmission_risk cannot be > 1
+  set Gamma1  1 / Latent_Duration
+  set Gamma2  1 / (Incubation_Duration - Latent_Duration)
+  set Gamma3  1 / Recover_Duration
+end
+
+to Calculate_Derivatives [i] ;Includes change in population and transmission rate
+  set Derivative_Susceptible   0 - Transmission_Rate * item i Susceptible
+  set Derivative_Latent   Transmission_rate * item i Susceptible  - gamma1 * item i Latent - (universal_test + trace_test) * item i Latent
+  set Derivative_Infectious  gamma1 * item i Latent  - gamma2 * item i Infectious - (universal_test + trace_test) * item i Infectious
+  set Derivative_Symptomatic  gamma2 * item i Infectious  - gamma3 * item i Symptomatic + (universal_test + trace_test) * (item i Latent + item i Infectious)
+  set Derivative_Recovered&Immune        gamma3 * (1 - case_fatality_rate) * item i Symptomatic
+  set Derivative_Deaths        gamma3 * (case_fatality_rate) * item i Symptomatic
+end
+
+to Calculate_Differential_Equations [i]
+  let outside_cases 0
+  if ticks  mod 7 = 0[set outside_cases num-outside-infections * Delta_t]
+  
+  set Susceptible  replace-item i  Susceptible (item i Susceptible + Derivative_Susceptible * Delta_t - outside_cases)
+  set Latent  replace-item i Latent  (item i Latent + Derivative_Latent * Delta_t + outside_cases)
+  set Infectious  replace-item i Infectious  (item i Infectious + Derivative_Infectious * Delta_t)
+  set Symptomatic  replace-item i Symptomatic  (item i Symptomatic + Derivative_Symptomatic * Delta_t)
+  set Recovered&Immune  replace-item i   Recovered&Immune   ( item i Recovered&Immune + Derivative_Recovered&Immune * Delta_t)
+  set Deaths  replace-item i Deaths  (item i Deaths + Derivative_Deaths * Delta_t)
+
+end
